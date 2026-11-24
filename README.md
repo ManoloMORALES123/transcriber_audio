@@ -37,6 +37,8 @@ transcriber_audio/
 ├── output/                 # Se crea si no existe
 │
 ├── transcriber.py
+├── transcriber_utils.py    # Detección de recursos y utilidades de selección
+├── test_transcriber_utils.py
 ├── requirements.txt
 └── README.md
 ```
@@ -45,7 +47,9 @@ transcriber_audio/
 
 - `audio/`: contiene los archivos de audio que se desean transcribir.
 - `output/`: almacena las transcripciones generadas.
-- `transcriber.py`: script principal de ejecución.
+- `transcriber.py`: CLI y coordinación de la transcripción.
+- `transcriber_utils.py`: detección de recursos y funciones auxiliares.
+- `test_transcriber_utils.py`: pruebas de la configuración automática.
 - `requirements.txt`: dependencias de Python.
 
 ## 4. Requisitos previos
@@ -93,22 +97,17 @@ python -m pip install -r requirements.txt
 
 ## 6. Configuración
 
-Las principales configuraciones se encuentran al inicio de `transcriber.py`:
+Por defecto, el programa detecta los CPU disponibles para el proceso y la memoria disponible (incluyendo límites habituales de cgroup en Linux/WSL). Selecciona un modelo conservador para esos recursos:
 
-```python
-AUDIO_DIR = Path("audio")
-OUTPUT_DIR = Path("output")
-
-MODEL_SIZE = "small"
-LANGUAGE = "es"
-```
-
-| Parámetro | Descripción |
+| Recursos detectados | Modelo automático |
 |---|---|
-| `AUDIO_DIR` | Directorio de entrada de los audios. |
-| `OUTPUT_DIR` | Directorio de salida de las transcripciones. |
-| `MODEL_SIZE` | Modelo Whisper utilizado. |
-| `LANGUAGE` | Idioma de la transcripción. |
+| 4 o más CPU y al menos 3.5 GB disponibles | `small` |
+| 2 o más CPU y al menos 2 GB disponibles | `base` |
+| Menos recursos | `tiny` |
+
+En una sesión WSL con 4 CPU y 8 GB de RAM, normalmente seleccionará `small`, usará INT8 y asignará un hilo por CPU disponible. La detección usa memoria disponible, por lo que puede elegir un modelo menor si otros procesos están consumiendo RAM. `beam_size=5` se mantiene para no sacrificar calidad automáticamente; puede reducirse manualmente para priorizar velocidad.
+
+Las carpetas `audio/` y `output/` se resuelven desde la ubicación del script, no desde el directorio actual. Se pueden cambiar con `--audio-dir` y `--output-dir`. Si se modifica el modelo o los parámetros, se puede comprobar la selección con `--help`.
 
 ### Modelos disponibles
 
@@ -140,6 +139,32 @@ Ejecutar:
 
 ```bash
 python transcriber.py
+```
+
+También se puede indicar directamente el archivo:
+
+```bash
+python transcriber.py --audio audio/reunion_01.m4a
+```
+
+Opciones habituales:
+
+```bash
+python transcriber.py --help
+python transcriber.py --model base
+python transcriber.py --beam-size 3
+python transcriber.py --cpu-threads 2
+python transcriber.py --output-dir transcripciones
+```
+
+`--model auto` es el valor predeterminado. `--model` admite `tiny`, `base`, `small`, `medium` y `large-v3`. Para evitar reemplazos accidentales, si ya existe un TXT con el mismo nombre, el programa se detiene; pasar `--overwrite` para reemplazarlo intencionalmente.
+
+Para ayudar con nombres propios y vocabulario especializado, se puede proporcionar contexto con `--initial-prompt "..."`. Si el filtro de silencios parece omitir voz, probar `--no-vad-filter`; por defecto permanece habilitado.
+
+Para ejecutar las pruebas de la configuración automática:
+
+```bash
+python -m unittest -v test_transcriber_utils
 ```
 
 El programa mostrará los archivos disponibles:
@@ -208,7 +233,7 @@ Es normal que la primera ejecución tarde más debido a la descarga del modelo W
 
 **Consumo elevado de memoria**
 
-Cambiar el modelo a `small`, `base` o `tiny`, dependiendo de los recursos disponibles.
+Usar `--model base` o `--model tiny`, o cerrar otras aplicaciones para liberar memoria. `--model auto` también reduce el modelo según los recursos disponibles detectados.
 
 ## 11. Próximas mejoras
 
